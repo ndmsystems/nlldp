@@ -12,10 +12,12 @@
 .PHONY: all clean distclean
 
 NLLDPD    = nlldpd
+NLDD      = nldd
 EXEC_DIR  = /sbin/
 UNAME    := $(shell uname)
 
-OBJS=$(patsubst %.c,%.o,$(wildcard *.c))
+OBJSNLLDPD=$(patsubst %.c,%.o,$(wildcard nlldpd.c))
+OBJSNLDD=$(patsubst %.c,%.o,$(wildcard nldd.c))
 CFLAGS   ?= \
 	-g3 -pipe -fPIC -std=c99 \
 	-D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 \
@@ -30,12 +32,15 @@ ifeq ($(UNAME),Linux)
 CFLAGS   += -D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE=600 -D_SVID_SOURCE=1
 endif
 
-all: $(NLLDPD)
+all: $(NLLDPD) $(NLDD)
 
-$(NLLDPD): $(OBJS) Makefile
-	$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) -o $@
+$(NLLDPD): $(OBJSNLLDPD) Makefile
+	$(CC) $(CFLAGS) $(OBJSNLLDPD) $(LDFLAGS) -o $@
+
+$(NLDD): $(OBJSNLDD) Makefile
+	$(CC) $(CFLAGS) $(OBJSNLDD) $(LDFLAGS) -o $@
 
 clean:
-	rm -fv *.o *~ $(NLLDPD)
+	rm -fv *.o *~ $(NLLDPD) $(NLDD)
 
 distclean: clean
