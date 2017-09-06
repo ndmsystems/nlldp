@@ -69,11 +69,18 @@ struct lldp_tlv
 			uint8_t subtype;
 			uint8_t data[511];
 		} sub;
+		struct
+		{
+			uint8_t org[3];
+			uint8_t subtype;
+			uint8_t data[508];
+		} org;
 	} u;
 } NDM_ATTR_PACKED;
 
-static uint8_t dst_broadcast_mac[] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
-static uint8_t dst_multicast_mac[] = { 0x01, 0x80, 0xc2, 0x00, 0x00, 0x0e };
+static const uint8_t const dst_broadcast_mac[] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+static const uint8_t const dst_multicast_mac[] = { 0x01, 0x80, 0xc2, 0x00, 0x00, 0x0e };
+static const uint8_t const org_uniq_code[] = { 'N', 'D', 'M' };
 
 /* external configuration */
 static bool debug = false;
@@ -89,6 +96,7 @@ static struct ndm_ip_sockaddr_t ipv4_address;
 static unsigned short port = 0;
 static bool is_bridge = false;
 static bool is_wlan_ap = false;
+static const char *version = "";
 
 /* internal state */
 static int fd_send = -1;
@@ -163,7 +171,7 @@ static void nlldpd_loop()
 	while (!ndm_sys_is_interrupted()) {
 		uint8_t packet[1024];
 		uint8_t *p = packet;
-		uint8_t *dst_mac;
+		const uint8_t const *dst_mac;
 		uint16_t *proto;
 		uint16_t caps;
 		size_t tlv_len;
@@ -247,10 +255,11 @@ static void nlldpd_loop()
 		if (is_bridge)
 			caps += (1 << 2); /* Bridge */
 
+		if (is_wlan_ap)
+			caps += (1 << 3); /* WLAN access point */
+
 		if (!strcmp(mode, "router"))
 			caps += (1 << 4); /* Router */
-		else if (!strcmp(mode, "repeater"))
-			caps += (1 << 1); /* Repeater */
 
 		/* Capabilities */
 		tlv_len = 4;
@@ -261,24 +270,13 @@ static void nlldpd_loop()
 		TLV_ADD(p, tlv, tlv_len);
 
 		if (strcmp(seclvl, "private") == 0) {
-			uint8_t mval = 1; // router
-
-			if (strcmp(mode, "client") == 0)
-				mval = 2;
-			else if (strcmp(mode, "repeater") == 0)
-				mval = 3;
-			else if (strcmp(mode, "ap") == 0)
-				mval = 4;
-
 			/* NDM Specific System Mode */
-			tlv_len = 5;
+			tlv_len = 4 + strlen(mode);
 			memset(&tlv, 0, sizeof(tlv));
 			tlv.hdr = TLV_HDR(127, tlv_len); /* NDM Specific System Mode */
-			*((uint8_t*)tlv.u.data) = 0xce;
-			*((uint8_t*)tlv.u.data + 1) = 0x1e;
-			*((uint8_t*)tlv.u.data + 2) = 0xe7;
-			*((uint8_t*)tlv.u.data + 3) = 1; /* NDM Subtype System Mode */
-			*((uint8_t*)tlv.u.data + 4) = mval; /* NDM Subtype System Mode value */
+			memcpy(tlv.u.org.org, org_uniq_code, sizeof(org_uniq_code));
+			tlv.u.org.subtype = 1; /* NDM Subtype System Mode */
+			memcpy(tlv.u.org.data, mode, strlen(mode)); /* NDM Subtype System Mode value */
 			TLV_ADD(p, tlv, tlv_len);
 		}
 
@@ -287,11 +285,20 @@ static void nlldpd_loop()
 			tlv_len = 6;
 			memset(&tlv, 0, sizeof(tlv));
 			tlv.hdr = TLV_HDR(127, tlv_len); /* NDM Specific HTTP port */
-			*((uint8_t*)tlv.u.data) = 0xce;
-			*((uint8_t*)tlv.u.data + 1) = 0x1e;
-			*((uint8_t*)tlv.u.data + 2) = 0xe7;
-			*((uint8_t*)tlv.u.data + 3) = 2; /* NDM Subtype HTTP port */
-			*((uint16_t*)(tlv.u.data + 4)) = htons(port); /* NDM Subtype HTTP port value */
+			memcpy(tlv.u.org.org, org_uniq_code, sizeof(org_uniq_code));
+			tlv.u.org.subtype = 2; /* NDM Subtype HTTP port */
+			*((uint16_t*)tlv.u.org.data) = htons(port); /* NDM Subtype HTTP port value */
+			TLV_ADD(p, tlv, tlv_len);
+		}
+
+		if (strcmp(seclvl, "private") == 0) {
+			/* NDM Specific Software version */
+			tlv_len = 4 + strlen(version);
+			memset(&tlv, 0, sizeof(tlv));
+			tlv.hdr = TLV_HDR(127, tlv_len); /* NDM Specific Software version */
+			memcpy(tlv.u.org.org, org_uniq_code, sizeof(org_uniq_code));
+			tlv.u.org.subtype = 3; /* NDM Subtype Software version */
+			memcpy(tlv.u.org.data, version, strlen(version)); /* NDM Subtype Software version value */
 			TLV_ADD(p, tlv, tlv_len);
 		}
 
@@ -382,7 +389,7 @@ int main(int argc, char *argv[])
 	ipv4_address = NDM_IP_SOCKADDR_ANY;
 
 	for (;;) {
-		c = getopt(argc, argv, "dS:m:M:I:p:x:n:D:A:P:bw");
+		c = getopt(argc, argv, "dS:m:M:I:p:x:n:D:A:P:bwV:");
 
 		if (c < 0)
 			break;
@@ -455,6 +462,10 @@ int main(int argc, char *argv[])
 
 		case 'w':
 			is_wlan_ap = true;
+			break;
+
+		case 'V':
+			version = optarg;
 			break;
 
 		default:
