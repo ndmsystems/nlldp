@@ -321,7 +321,7 @@ static void nldd_handle_packet()
 		if( !ndm_feedback(NDM_FEEDBACK_TIMEOUT_MSEC,
 				args,
 				"%s=%s" NESEP_
-				"%s=%x" NESEP_
+				"%s=%u" NESEP_
 				"%s=%s" NESEP_
 				"%s=%s" NESEP_
 				"%s=%u" NESEP_
