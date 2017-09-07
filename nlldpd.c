@@ -31,6 +31,8 @@ THE SOFTWARE.
 #include <unistd.h>
 #include <fcntl.h>
 #include <net/ethernet.h>
+#include <pwd.h>
+#include <grp.h>
 
 #include <linux/if.h>
 #include <linux/ip.h>
@@ -83,7 +85,7 @@ static const uint8_t const dst_multicast_mac[] = { 0x01, 0x80, 0xc2, 0x00, 0x00,
 static const uint8_t const org_uniq_code[] = { 'N', 'D', 'M' };
 
 /* external configuration */
-static bool debug = false;
+static const char *user = "nobody";
 static const char *seclvl = "public";
 static const char *mode = "router";
 static struct ndm_mac_addr_t mac;
@@ -100,6 +102,46 @@ static const char *version = "";
 
 /* internal state */
 static int fd_send = -1;
+
+static bool nlldpd_drop_privileges()
+{
+	if (geteuid() == 0) {
+		struct group *grp;
+		struct passwd *pwd;
+
+		pwd = getpwnam(user);
+
+		if (pwd == NULL) {
+			NDM_LOG_ERROR("Unable to get UID for user \"%s\": %s",
+				user, strerror(errno));
+			return false;
+		}
+
+		errno = 0;
+
+		grp = getgrnam(user);
+
+		if (grp == NULL) {
+			NDM_LOG_ERROR("Unable to get GID for group \"%s\": %s",
+				user, strerror(errno));
+			return false;
+		}
+
+		if (setgid(grp->gr_gid) == -1) {
+			NDM_LOG_ERROR("Unable to set new group \"%s\": %s",
+				user, strerror(errno));
+			return false;
+		}
+
+		if (setuid(pwd->pw_uid) == -1) {
+			NDM_LOG_ERROR("Unable to set new user \"%s\": %s",
+				user, strerror(errno));
+			return false;
+		}
+	}
+
+	return true;
+}
 
 static bool nlldpd_set_nonblock(int fd)
 {
@@ -269,16 +311,14 @@ static void nlldpd_loop()
 		*((uint16_t*)(tlv.u.data + 2)) = htons(caps);
 		TLV_ADD(p, tlv, tlv_len);
 
-		if (strcmp(seclvl, "private") == 0) {
-			/* NDM Specific System Mode */
-			tlv_len = 4 + strlen(mode);
-			memset(&tlv, 0, sizeof(tlv));
-			tlv.hdr = TLV_HDR(127, tlv_len); /* NDM Specific System Mode */
-			memcpy(tlv.u.org.org, org_uniq_code, sizeof(org_uniq_code));
-			tlv.u.org.subtype = 1; /* NDM Subtype System Mode */
-			memcpy(tlv.u.org.data, mode, strlen(mode)); /* NDM Subtype System Mode value */
-			TLV_ADD(p, tlv, tlv_len);
-		}
+		/* NDM Specific System Mode */
+		tlv_len = 4 + strlen(mode);
+		memset(&tlv, 0, sizeof(tlv));
+		tlv.hdr = TLV_HDR(127, tlv_len); /* NDM Specific System Mode */
+		memcpy(tlv.u.org.org, org_uniq_code, sizeof(org_uniq_code));
+		tlv.u.org.subtype = 1; /* NDM Subtype System Mode */
+		memcpy(tlv.u.org.data, mode, strlen(mode)); /* NDM Subtype System Mode value */
+		TLV_ADD(p, tlv, tlv_len);
 
 		if (strcmp(seclvl, "private") == 0 && port != 0) {
 			/* NDM Specific HTTP port */
@@ -366,6 +406,9 @@ static void nlldpd_main()
 		}
 	}
 
+	if (!nlldpd_drop_privileges())
+		goto cleanup;
+
 	nlldpd_loop();
 
 cleanup:
@@ -389,15 +432,15 @@ int main(int argc, char *argv[])
 	ipv4_address = NDM_IP_SOCKADDR_ANY;
 
 	for (;;) {
-		c = getopt(argc, argv, "dS:m:M:I:p:x:n:D:A:P:bwV:");
+		c = getopt(argc, argv, "u:S:m:M:I:p:x:n:D:A:P:bwV:");
 
 		if (c < 0)
 			break;
 
 		switch (c) {
 
-		case 'd':
-			debug = true;
+		case 'u':
+			user = optarg;
 			break;
 
 		case 'S':

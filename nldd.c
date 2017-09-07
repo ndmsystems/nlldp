@@ -33,6 +33,8 @@ THE SOFTWARE.
 #include <unistd.h>
 #include <fcntl.h>
 #include <net/ethernet.h>
+#include <pwd.h>
+#include <grp.h>
 
 #include <linux/if.h>
 #include <linux/ip.h>
@@ -86,10 +88,51 @@ struct lldp_tlv
 static const uint8_t const org_uniq_code[] = { 'N', 'D', 'M' };
 
 /* external configuration */
+static const char *user = "nobody";
 
 /* internal state */
 static int fd_recv = -1;
 static struct pollfd pfds[1];
+
+static bool nldd_drop_privileges()
+{
+	if (geteuid() == 0) {
+		struct group *grp;
+		struct passwd *pwd;
+
+		pwd = getpwnam(user);
+
+		if (pwd == NULL) {
+			NDM_LOG_ERROR("Unable to get UID for user \"%s\": %s",
+				user, strerror(errno));
+			return false;
+		}
+
+		errno = 0;
+
+		grp = getgrnam(user);
+
+		if (grp == NULL) {
+			NDM_LOG_ERROR("Unable to get GID for group \"%s\": %s",
+				user, strerror(errno));
+			return false;
+		}
+
+		if (setgid(grp->gr_gid) == -1) {
+			NDM_LOG_ERROR("Unable to set new group \"%s\": %s",
+				user, strerror(errno));
+			return false;
+		}
+
+		if (setuid(pwd->pw_uid) == -1) {
+			NDM_LOG_ERROR("Unable to set new user \"%s\": %s",
+				user, strerror(errno));
+			return false;
+		}
+	}
+
+	return true;
+}
 
 static bool nldd_set_nonblock(int fd)
 {
@@ -169,7 +212,7 @@ static void nldd_handle_packet()
 	if (!nldd_nonblock_read(fd_recv, packet, sizeof(packet), &bytes_read, &sa) ||
 		bytes_read == 0) {
 
-		NDM_LOG_ERROR("unable to receive LLDP packet: %lu", bytes_read);
+		NDM_LOG_ERROR("unable to receive LLDP packet: %u", bytes_read);
 
 		return;
 	}
@@ -371,6 +414,10 @@ static void nldd_main()
 		goto cleanup;
 	}
 
+	if (!nldd_drop_privileges()) {
+		goto cleanup;
+	}
+
 	memset(&pfds, 0, sizeof(pfds));
 
 	pfds[0].fd = fd_recv;
@@ -388,6 +435,27 @@ int main(int argc, char *argv[])
 {
 	int ret_code = EXIT_FAILURE;
 	const char *const ident = ndm_log_get_ident(argv);
+	int c;
+
+	for (;;) {
+		c = getopt(argc, argv, "u:");
+
+		if (c < 0)
+			break;
+
+		switch (c) {
+
+		case 'u':
+			user = optarg;
+			break;
+
+
+		default:
+			NDM_LOG_ERROR("unknown option \"%c\"", (char) optopt);
+
+			return ret_code;
+		}
+	}
 
 	if (!ndm_log_init(ident, NULL, false, true)) {
 		fprintf(stderr, "%s: failed to initialize a log\n", ident);
