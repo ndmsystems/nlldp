@@ -100,6 +100,7 @@ static bool nldd_drop_privileges()
 		struct group *grp;
 		struct passwd *pwd;
 
+		errno = 0;
 		pwd = getpwnam(user);
 
 		if (pwd == NULL) {
@@ -109,7 +110,6 @@ static bool nldd_drop_privileges()
 		}
 
 		errno = 0;
-
 		grp = getgrnam(user);
 
 		if (grp == NULL) {
