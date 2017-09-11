@@ -100,6 +100,7 @@ static bool nlldo_drop_privileges()
 		struct group *grp;
 		struct passwd *pwd;
 
+		errno = 0;
 		pwd = getpwnam(user);
 
 		if (pwd == NULL) {
@@ -109,7 +110,6 @@ static bool nlldo_drop_privileges()
 		}
 
 		errno = 0;
-
 		grp = getgrnam(user);
 
 		if (grp == NULL) {
@@ -286,7 +286,7 @@ static void nlldo_handle_packet()
 							}
 							break;
 						case 2: /* System port */
-							if (TLV_LEN(tlv->hdr) == sizeof(p_port)) {
+							if (TLV_LEN(tlv->hdr) - 4 == sizeof(p_port)) {
 								p_port = ntohs(*((uint16_t*)tlv->u.org.data));
 							}
 							break;
@@ -319,21 +319,21 @@ static void nlldo_handle_packet()
 		};
 
 		if( !ndm_feedback(NDM_FEEDBACK_TIMEOUT_MSEC,
-			args,
-			"%s=%s" NESEP_
-			"%s=%x" NESEP_
-			"%s=%s" NESEP_
-			"%s=%s" NESEP_
-			"%s=%u" NESEP_
-			"%s=%d" NESEP_
-			"%s=%s",
-			"mac", ndm_mac_addr_as_string(&p_mac),
-			"ip", p_management_ip,
-			"desc", p_description,
-			"mode", p_mode,
-			"http_port", p_port,
-			"inderface_idx", sa.sll_ifindex,
-			"fw_version", p_fw) ) {
+				args,
+				"%s=%s" NESEP_
+				"%s=%u" NESEP_
+				"%s=%s" NESEP_
+				"%s=%s" NESEP_
+				"%s=%u" NESEP_
+				"%s=%d" NESEP_
+				"%s=%s",
+				"mac", ndm_mac_addr_as_string(&p_mac),
+				"ip", p_management_ip,
+				"desc", p_description,
+				"mode", p_mode,
+				"http_port", p_port,
+				"inderface_idx", sa.sll_ifindex,
+				"fw_version", p_fw) ) {
 			NDM_LOG_ERROR("unable to communicate with ndm");
 		}
 	}
