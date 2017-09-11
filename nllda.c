@@ -103,7 +103,7 @@ static const char *version = "";
 /* internal state */
 static int fd_send = -1;
 
-static bool nlldpd_drop_privileges()
+static bool nllda_drop_privileges()
 {
 	if (geteuid() == 0) {
 		struct group *grp;
@@ -143,7 +143,7 @@ static bool nlldpd_drop_privileges()
 	return true;
 }
 
-static bool nlldpd_set_nonblock(int fd)
+static bool nllda_set_nonblock(int fd)
 {
 	int flags;
 
@@ -166,7 +166,7 @@ static bool nlldpd_set_nonblock(int fd)
 	return true;
 }
 
-static bool nlldpd_nonblock_write(
+static bool nllda_nonblock_write(
 		int fd, const void *p, size_t buf_size, size_t *bytes_written,
 		struct sockaddr_ll *sa)
 {
@@ -208,7 +208,7 @@ static bool nlldpd_nonblock_write(
 	return true;
 }
 
-static void nlldpd_loop()
+static void nllda_loop()
 {
 	while (!ndm_sys_is_interrupted()) {
 		uint8_t packet[1024];
@@ -359,7 +359,7 @@ static void nlldpd_loop()
 
 			memcpy(&sa.sll_addr, &mac.sa.sa_data, ETHER_ADDR_LEN);
 
-			if (!nlldpd_nonblock_write(
+			if (!nllda_nonblock_write(
 					fd_send, packet, len, &bytes_written, &sa) ||
 				len != bytes_written) {
 				NDM_LOG_ERROR("unable to send LLDPDU");
@@ -370,7 +370,7 @@ static void nlldpd_loop()
 	}
 }
 
-static void nlldpd_main()
+static void nllda_main()
 {
 	fd_send = socket(AF_PACKET, SOCK_RAW, 0);
 
@@ -382,7 +382,7 @@ static void nlldpd_main()
 		goto cleanup;
 	}
 
-	if (!nlldpd_set_nonblock(fd_send)) {
+	if (!nllda_set_nonblock(fd_send)) {
 		goto cleanup;
 	}
 
@@ -406,10 +406,10 @@ static void nlldpd_main()
 		}
 	}
 
-	if (!nlldpd_drop_privileges())
+	if (!nllda_drop_privileges())
 		goto cleanup;
 
-	nlldpd_loop();
+	nllda_loop();
 
 cleanup:
 	if (fd_send != -1)
@@ -536,7 +536,7 @@ int main(int argc, char *argv[])
 		return ret_code;
 	}
 
-	nlldpd_main();
+	nllda_main();
 
 	return EXIT_SUCCESS;
 }

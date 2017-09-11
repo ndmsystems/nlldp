@@ -11,13 +11,13 @@
 
 .PHONY: all clean distclean
 
-NLLDPD    = nlldpd
-NLDD      = nldd
+NLLDA     = nllda
+NLLDO     = nlldo
 EXEC_DIR  = /sbin/
 UNAME    := $(shell uname)
 
-OBJSNLLDPD=$(patsubst %.c,%.o,$(wildcard nlldpd.c))
-OBJSNLDD=$(patsubst %.c,%.o,$(wildcard nldd.c))
+OBJSNLLDA=$(patsubst %.c,%.o,$(wildcard nllda.c))
+OBJSNLLDO=$(patsubst %.c,%.o,$(wildcard nlldo.c))
 CFLAGS   ?= \
 	-g3 -pipe -fPIC -std=c99 \
 	-D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64 \
@@ -32,15 +32,15 @@ ifeq ($(UNAME),Linux)
 CFLAGS   += -D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE=600 -D_SVID_SOURCE=1
 endif
 
-all: $(NLLDPD) $(NLDD)
+all: $(NLLDA) $(NLLDO)
 
-$(NLLDPD): $(OBJSNLLDPD) Makefile
-	$(CC) $(CFLAGS) $(OBJSNLLDPD) $(LDFLAGS) -o $@
+$(NLLDA): $(OBJSNLLDA) Makefile
+	$(CC) $(CFLAGS) $(OBJSNLLDA) $(LDFLAGS) -o $@
 
-$(NLDD): $(OBJSNLDD) Makefile
-	$(CC) $(CFLAGS) $(OBJSNLDD) $(LDFLAGS) -o $@
+$(NLLDO): $(OBJSNLLDO) Makefile
+	$(CC) $(CFLAGS) $(OBJSNLLDO) $(LDFLAGS) -o $@
 
 clean:
-	rm -fv *.o *~ $(NLLDPD) $(NLDD)
+	rm -fv *.o *~ $(NLLDA) $(NLLDO)
 
 distclean: clean

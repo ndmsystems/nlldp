@@ -94,7 +94,7 @@ static const char *user = "nobody";
 static int fd_recv = -1;
 static struct pollfd pfds[1];
 
-static bool nldd_drop_privileges()
+static bool nlldo_drop_privileges()
 {
 	if (geteuid() == 0) {
 		struct group *grp;
@@ -134,7 +134,7 @@ static bool nldd_drop_privileges()
 	return true;
 }
 
-static bool nldd_set_nonblock(int fd)
+static bool nlldo_set_nonblock(int fd)
 {
 	int flags;
 
@@ -158,7 +158,7 @@ static bool nldd_set_nonblock(int fd)
 }
 
 
-static bool nldd_nonblock_read(
+static bool nlldo_nonblock_read(
 		int fd, void *p, size_t buf_size, size_t *bytes_read, struct sockaddr_ll *sa)
 {
 	socklen_t len = sizeof(*sa);
@@ -189,7 +189,7 @@ static bool nldd_nonblock_read(
 	return true;
 }
 
-static void nldd_handle_packet()
+static void nlldo_handle_packet()
 {
 	uint8_t packet[2048];
 	uint8_t *p = packet;
@@ -209,7 +209,7 @@ static void nldd_handle_packet()
 	memset(p_mode, 0, sizeof(p_mode));
 	memset(p_fw, 0, sizeof(p_fw));
 
-	if (!nldd_nonblock_read(fd_recv, packet, sizeof(packet), &bytes_read, &sa) ||
+	if (!nlldo_nonblock_read(fd_recv, packet, sizeof(packet), &bytes_read, &sa) ||
 		bytes_read == 0) {
 
 		NDM_LOG_ERROR("unable to receive LLDP packet: %u", bytes_read);
@@ -342,7 +342,7 @@ exit:
 	;;
 }
 
-static void nldd_loop()
+static void nlldo_loop()
 {
 	while (!ndm_sys_is_interrupted()) {
 		int ret = poll(pfds, NDM_ARRAY_SIZE(pfds), POLL_TIME);
@@ -387,7 +387,7 @@ static void nldd_loop()
 
 		for (unsigned long i = 0; i < NDM_ARRAY_SIZE(pfds); ++i) {
 			if ((pfds[i].revents & POLLIN) && pfds[i].fd == fd_recv) {
-				nldd_handle_packet();
+				nlldo_handle_packet();
 			}
 		}
 
@@ -398,7 +398,7 @@ reinit:
 	}
 }
 
-static void nldd_main()
+static void nlldo_main()
 {
 	fd_recv = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_LLDP));
 
@@ -410,11 +410,11 @@ static void nldd_main()
 		goto cleanup;
 	}
 
-	if (!nldd_set_nonblock(fd_recv)) {
+	if (!nlldo_set_nonblock(fd_recv)) {
 		goto cleanup;
 	}
 
-	if (!nldd_drop_privileges()) {
+	if (!nlldo_drop_privileges()) {
 		goto cleanup;
 	}
 
@@ -423,7 +423,7 @@ static void nldd_main()
 	pfds[0].fd = fd_recv;
 	pfds[0].events = POLLIN;
 
-	nldd_loop();
+	nlldo_loop();
 
 cleanup:
 
@@ -475,7 +475,7 @@ int main(int argc, char *argv[])
 		return ret_code;
 	}
 
-	nldd_main();
+	nlldo_main();
 
 	return EXIT_SUCCESS;
 }
