@@ -50,7 +50,7 @@ THE SOFTWARE.
 #include <ndm/feedback.h>
 
 #define NESEP_						NDM_FEEDBACK_ENV_SEPARATOR
-#define FEEDBACK					"/tmp/run/lddp.fb"
+#define FEEDBACK					"/tmp/run/nlldo.fb"
 
 #define POLL_TIME					(60 * 1024) // 60 sec
 #define READ_RETRY_MS				100 // ms
