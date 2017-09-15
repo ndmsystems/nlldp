@@ -332,7 +332,7 @@ static void nlldo_handle_packet()
 				"desc", p_description,
 				"mode", p_mode,
 				"http_port", p_port,
-				"inderface_idx", sa.sll_ifindex,
+				"interface_idx", sa.sll_ifindex,
 				"fw_version", p_fw) ) {
 			NDM_LOG_ERROR("unable to communicate with ndm");
 		}
