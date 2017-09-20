@@ -56,12 +56,15 @@ THE SOFTWARE.
 #define READ_RETRY_MS				100 // ms
 #define READ_RETRY_TIMES			5 //
 
+#if !defined(ETH_P_LLDP)
 #define ETH_P_LLDP					0x88cc
+#endif /* ETH_P_LLDP */
 
 #define TLV_HDR(id_, len_)			htons((uint16_t)(((id_) << 9) + (len_)))
 #define TLV_LEN(hdr_)				(ntohs(hdr_) & 0x01ff)
 #define TLV_TAG(hdr_)				((ntohs(hdr_) >> 9) & 0x7f)
 #define TLV_HDR_LEN					2
+#define TLV_SUBTYPE_LEN				4
 #define OFFSET(s_, p_)				((p_) > (s_) ? (uint8_t *)(p_) - (uint8_t *)(s_) : 0)
 
 
@@ -88,6 +91,7 @@ struct lldp_tlv
 static const uint8_t const org_uniq_code[] = { 'N', 'D', 'M' };
 
 /* external configuration */
+static bool debug = false;
 static const char *user = "nobody";
 
 /* internal state */
@@ -173,12 +177,16 @@ static bool nlldo_nonblock_read(
 			return false;
 
 		} else {
-			NDM_LOG_ERROR("unable receive packet: %s", strerror(error));
+			if (debug) {
+				NDM_LOG_ERROR("unable receive packet: %s", strerror(error));
+			}
 
 			return false;
 		}
 	} else if (len != sizeof(*sa) - 2) {
-		NDM_LOG_ERROR("invalid address size");
+		if (debug) {
+			NDM_LOG_ERROR("invalid address size");
+		}
 
 		return false;
 
@@ -212,12 +220,14 @@ static void nlldo_handle_packet()
 	if (!nlldo_nonblock_read(fd_recv, packet, sizeof(packet), &bytes_read, &sa) ||
 		bytes_read == 0) {
 
-		NDM_LOG_ERROR("unable to receive LLDP packet: %u", bytes_read);
+		if (debug) {
+			NDM_LOG_ERROR("unable to receive LLDP packet: %u", bytes_read);
+		}
 
 		return;
 	}
 
-	if (bytes_read == sizeof(packet))
+	if (bytes_read == sizeof(packet) && debug)
 		NDM_LOG_ERROR("packet is truncated");
 
 	if (sa.sll_protocol != htons(ETH_P_LLDP))
@@ -238,7 +248,9 @@ static void nlldo_handle_packet()
 		p += 2 * ETHER_ADDR_LEN + 2;
 
 	if (OFFSET(packet, p) + TLV_HDR_LEN > bytes_read) {
-		NDM_LOG_ERROR("malformed packet");
+		if (debug) {
+			NDM_LOG_ERROR("malformed LLDP packet");
+		}
 
 		return;
 	}
@@ -247,7 +259,11 @@ static void nlldo_handle_packet()
 		tlv = (struct lldp_tlv *)p;
 
 		if (OFFSET(packet, p) + TLV_HDR_LEN + TLV_LEN(tlv->hdr) > bytes_read) {
-			NDM_LOG_ERROR("len: %d", TLV_LEN(tlv->hdr));
+			if (debug) {
+				NDM_LOG_ERROR("packet len: %d, offset: %d, TLV len:%d",
+					bytes_read, OFFSET(packet, p), TLV_LEN(tlv->hdr));
+			}
+
 			break;
 		}
 
@@ -278,21 +294,22 @@ static void nlldo_handle_packet()
 
 			case 127:
 				if (!memcmp(tlv->u.org.org, org_uniq_code, sizeof(org_uniq_code))) {
+					const size_t datalen = TLV_LEN(tlv->hdr) - TLV_SUBTYPE_LEN;
 					/* NDM Systems private tags */
 					switch (tlv->u.org.subtype) {
 						case 1: /* System mode */
-							if (TLV_LEN(tlv->hdr) - 4 < sizeof(p_mode)) {
-								memcpy(p_mode, tlv->u.org.data, TLV_LEN(tlv->hdr) - 4);
+							if (datalen < sizeof(p_mode)) {
+								memcpy(p_mode, tlv->u.org.data, datalen);
 							}
 							break;
 						case 2: /* System port */
-							if (TLV_LEN(tlv->hdr) - 4 == sizeof(p_port)) {
+							if (datalen == sizeof(p_port)) {
 								p_port = ntohs(*((uint16_t*)tlv->u.org.data));
 							}
 							break;
 						case 3: /* FW version */
-							if (TLV_LEN(tlv->hdr) - 4 < sizeof(p_fw)) {
-								memcpy(p_fw, tlv->u.org.data, TLV_LEN(tlv->hdr) - 4);
+							if (datalen < sizeof(p_fw)) {
+								memcpy(p_fw, tlv->u.org.data, datalen);
 							}
 						default:
 							break;
@@ -333,7 +350,7 @@ static void nlldo_handle_packet()
 				"mode", p_mode,
 				"http_port", p_port,
 				"interface_idx", sa.sll_ifindex,
-				"fw_version", p_fw) ) {
+				"fw_version", p_fw) && debug) {
 			NDM_LOG_ERROR("unable to communicate with ndm");
 		}
 	}
@@ -358,7 +375,9 @@ static void nlldo_loop()
 				return;
 			}
 
-			NDM_LOG_ERROR("poll error: %s", strerror(err));
+			if (debug) {
+				NDM_LOG_ERROR("poll error: %s", strerror(err));
+			}
 
 			ndm_sys_sleep_msec(NDM_SYS_SLEEP_GRANULARITY_MSEC);
 
@@ -371,7 +390,33 @@ static void nlldo_loop()
 
 		for (unsigned long i = 0; i < NDM_ARRAY_SIZE(pfds); ++i) {
 			if ((pfds[i].revents & POLLERR) || (pfds[i].revents & POLLHUP)) {
-				has_error = true;
+				int err = 0;
+				socklen_t errlen = sizeof(err);
+
+				if (getsockopt(pfds[i].fd, SOL_SOCKET, SO_ERROR,
+						(void *)&err, &errlen) != 0) {
+					err = errno;
+				}
+
+				if (err == ENETDOWN) {
+					/* the interface has become inactive,
+					 * continue to poll it */
+
+					if (debug) {
+						NDM_LOG_INFO("the interface went down");
+					}
+
+					ndm_sys_sleep_msec(NDM_SYS_SLEEP_GRANULARITY_MSEC);
+
+					goto reinit;
+
+				} else {
+					if (debug) {
+						NDM_LOG_ERROR("failed to poll: %s[%d]",
+							strerror(err), err);
+						has_error = true;
+					}
+				}
 			}
 
 			if (pfds[i].fd != -1 && (pfds[i].revents & POLLNVAL)) {
@@ -380,9 +425,13 @@ static void nlldo_loop()
 		}
 
 		if (has_error) {
-			NDM_LOG_ERROR("socket was unexpectedly closed");
+			if (debug) {
+				NDM_LOG_ERROR("socket was unexpectedly closed");
+			}
 
-			return;
+			ndm_sys_sleep_msec(NDM_SYS_SLEEP_GRANULARITY_MSEC);
+
+			goto reinit;
 		}
 
 		for (unsigned long i = 0; i < NDM_ARRAY_SIZE(pfds); ++i) {
@@ -438,12 +487,16 @@ int main(int argc, char *argv[])
 	int c;
 
 	for (;;) {
-		c = getopt(argc, argv, "u:");
+		c = getopt(argc, argv, "u:d");
 
 		if (c < 0)
 			break;
 
 		switch (c) {
+
+		case 'd':
+			debug = true;
+			break;
 
 		case 'u':
 			user = optarg;
@@ -473,6 +526,10 @@ int main(int argc, char *argv[])
 		NDM_LOG_ERROR("unable set signal handlers");
 
 		return ret_code;
+	}
+
+	if (debug) {
+		NDM_LOG_INFO("debug is enabled");
 	}
 
 	nlldo_main();

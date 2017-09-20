@@ -51,7 +51,9 @@ THE SOFTWARE.
 #define READ_RETRY_MS				100 // ms
 #define READ_RETRY_TIMES			5 //
 
+#if !defined(ETH_P_LLDP)
 #define ETH_P_LLDP					0x88cc
+#endif /* ETH_P_LLDP */
 
 #define TLV_HDR(id_, len_)			htons((uint16_t)(((id_) << 9) + (len_)))
 #define TLV_ADD(p_, tlv_, tlv_len_)							\
@@ -85,6 +87,7 @@ static const uint8_t const dst_multicast_mac[] = { 0x01, 0x80, 0xc2, 0x00, 0x00,
 static const uint8_t const org_uniq_code[] = { 'N', 'D', 'M' };
 
 /* external configuration */
+static bool debug = false;
 static const char *user = "nobody";
 static const char *seclvl = "public";
 static const char *mode = "router";
@@ -194,7 +197,9 @@ static bool nllda_nonblock_write(
 					return false;
 				}
 			} else {
-				NDM_LOG_ERROR("unable send packet: %s", strerror(error));
+				if( debug ) {
+					NDM_LOG_ERROR("unable send packet: %s", strerror(error));
+				}
 
 				return false;
 			}
@@ -359,9 +364,9 @@ static void nllda_loop()
 
 			memcpy(&sa.sll_addr, &mac.sa.sa_data, ETHER_ADDR_LEN);
 
-			if (!nllda_nonblock_write(
+			if ((!nllda_nonblock_write(
 					fd_send, packet, len, &bytes_written, &sa) ||
-				len != bytes_written) {
+				len != bytes_written) && debug) {
 				NDM_LOG_ERROR("unable to send LLDPDU");
 			}
 		}
@@ -432,12 +437,16 @@ int main(int argc, char *argv[])
 	ipv4_address = NDM_IP_SOCKADDR_ANY;
 
 	for (;;) {
-		c = getopt(argc, argv, "u:S:m:M:I:p:x:n:D:A:P:bwV:");
+		c = getopt(argc, argv, "u:S:m:M:I:p:x:n:D:A:P:bwV:d");
 
 		if (c < 0)
 			break;
 
 		switch (c) {
+
+		case 'd':
+			debug = true;
+			break;
 
 		case 'u':
 			user = optarg;
@@ -534,6 +543,10 @@ int main(int argc, char *argv[])
 		NDM_LOG_ERROR("unable set signal handlers");
 
 		return ret_code;
+	}
+
+	if (debug) {
+		NDM_LOG_INFO("debug is enabled");
 	}
 
 	nllda_main();
