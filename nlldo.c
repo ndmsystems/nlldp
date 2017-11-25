@@ -221,7 +221,7 @@ static void nlldo_handle_packet()
 		bytes_read == 0) {
 
 		if (debug) {
-			NDM_LOG_ERROR("unable to receive LLDP packet: %u", bytes_read);
+			NDM_LOG_ERROR("unable to receive LLDP packet: %zu", bytes_read);
 		}
 
 		return;
@@ -260,8 +260,8 @@ static void nlldo_handle_packet()
 
 		if (OFFSET(packet, p) + TLV_HDR_LEN + TLV_LEN(tlv->hdr) > bytes_read) {
 			if (debug) {
-				NDM_LOG_ERROR("packet len: %d, offset: %d, TLV len:%d",
-					bytes_read, OFFSET(packet, p), TLV_LEN(tlv->hdr));
+				NDM_LOG_ERROR("packet len: %zu, offset: %zu, TLV len:%zu",
+					bytes_read, (size_t) OFFSET(packet, p), (size_t) TLV_LEN(tlv->hdr));
 			}
 
 			break;
