@@ -350,8 +350,12 @@ static void nlldo_handle_packet()
 				"mode", p_mode,
 				"http_port", p_port,
 				"interface_idx", sa.sll_ifindex,
-				"fw_version", p_fw) && debug) {
-			NDM_LOG_ERROR("unable to communicate with ndm");
+				"fw_version", p_fw) && debug ) {
+			const int err = errno;
+
+			NDM_LOG_ERROR(
+				"unable to communicate with ndm: \"%s\"",
+				strerror(err));
 		}
 	}
 
