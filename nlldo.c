@@ -88,7 +88,7 @@ struct lldp_tlv
 	} u;
 } NDM_ATTR_PACKED;
 
-static const uint8_t const org_uniq_code[] = { 'N', 'D', 'M' };
+static const uint8_t org_uniq_code[] = { 'N', 'D', 'M' };
 
 /* external configuration */
 static bool debug = false;
@@ -211,11 +211,13 @@ static void nlldo_handle_packet()
 	uint8_t p_mode[32];
 	uint16_t p_port = 0;
 	uint8_t p_fw[128];
+	uint8_t p_cid[128];
 
 	ndm_mac_addr_init(&p_mac);
 	memset(p_description, 0, sizeof(p_description));
 	memset(p_mode, 0, sizeof(p_mode));
 	memset(p_fw, 0, sizeof(p_fw));
+	memset(p_cid, 0, sizeof(p_cid));
 
 	if (!nlldo_nonblock_read(fd_recv, packet, sizeof(packet), &bytes_read, &sa) ||
 		bytes_read == 0) {
@@ -311,6 +313,10 @@ static void nlldo_handle_packet()
 							if (datalen < sizeof(p_fw)) {
 								memcpy(p_fw, tlv->u.org.data, datalen);
 							}
+						case 4: /* CID */
+							if (datalen < sizeof(p_cid)) {
+								memcpy(p_cid, tlv->u.org.data, datalen);
+							}
 						default:
 							break;
 					};
@@ -343,6 +349,7 @@ static void nlldo_handle_packet()
 				"%s=%s" NESEP_
 				"%s=%u" NESEP_
 				"%s=%d" NESEP_
+				"%s=%s" NESEP_
 				"%s=%s",
 				"mac", ndm_mac_addr_as_string(&p_mac),
 				"ip", p_management_ip,
@@ -350,7 +357,8 @@ static void nlldo_handle_packet()
 				"mode", p_mode,
 				"http_port", p_port,
 				"interface_idx", sa.sll_ifindex,
-				"fw_version", p_fw) && debug ) {
+				"fw_version", p_fw,
+				"cid", p_cid) && debug ) {
 			const int err = errno;
 
 			NDM_LOG_ERROR(

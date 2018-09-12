@@ -82,9 +82,9 @@ struct lldp_tlv
 	} u;
 } NDM_ATTR_PACKED;
 
-static const uint8_t const dst_broadcast_mac[] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
-static const uint8_t const dst_multicast_mac[] = { 0x01, 0x80, 0xc2, 0x00, 0x00, 0x0e };
-static const uint8_t const org_uniq_code[] = { 'N', 'D', 'M' };
+static const uint8_t dst_broadcast_mac[] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+static const uint8_t dst_multicast_mac[] = { 0x01, 0x80, 0xc2, 0x00, 0x00, 0x0e };
+static const uint8_t org_uniq_code[] = { 'N', 'D', 'M' };
 
 /* external configuration */
 static bool debug = false;
@@ -102,6 +102,7 @@ static unsigned short port = 0;
 static bool is_bridge = false;
 static bool is_wlan_ap = false;
 static const char *version = "";
+static const char *cid = "";
 
 /* internal state */
 static int fd_send = -1;
@@ -218,7 +219,7 @@ static void nllda_loop()
 	while (!ndm_sys_is_interrupted()) {
 		uint8_t packet[1024];
 		uint8_t *p = packet;
-		const uint8_t const *dst_mac;
+		const uint8_t *dst_mac;
 		uint16_t *proto;
 		uint16_t caps;
 		size_t tlv_len;
@@ -344,6 +345,17 @@ static void nllda_loop()
 			memcpy(tlv.u.org.org, org_uniq_code, sizeof(org_uniq_code));
 			tlv.u.org.subtype = 3; /* NDM Subtype Software version */
 			memcpy(tlv.u.org.data, version, strlen(version)); /* NDM Subtype Software version value */
+			TLV_ADD(p, tlv, tlv_len);
+		}
+
+		if (strcmp(seclvl, "private") == 0 && strlen(cid) > 1) {
+			/* NDM Specific Device CID */
+			tlv_len = 4 + strlen(cid);
+			memset(&tlv, 0, sizeof(tlv));
+			tlv.hdr = TLV_HDR(127, tlv_len); /* NDM Specific Device CID */
+			memcpy(tlv.u.org.org, org_uniq_code, sizeof(org_uniq_code));
+			tlv.u.org.subtype = 4; /* NDM Subtype Device CID */
+			memcpy(tlv.u.org.data, version, strlen(cid)); /* NDM Subtype Device CID value */
 			TLV_ADD(p, tlv, tlv_len);
 		}
 
@@ -518,6 +530,10 @@ int main(int argc, char *argv[])
 
 		case 'V':
 			version = optarg;
+			break;
+
+		case 'c':
+			cid = optarg;
 			break;
 
 		default:
