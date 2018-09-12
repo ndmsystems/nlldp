@@ -355,7 +355,7 @@ static void nllda_loop()
 			tlv.hdr = TLV_HDR(127, tlv_len); /* NDM Specific Device CID */
 			memcpy(tlv.u.org.org, org_uniq_code, sizeof(org_uniq_code));
 			tlv.u.org.subtype = 4; /* NDM Subtype Device CID */
-			memcpy(tlv.u.org.data, version, strlen(cid)); /* NDM Subtype Device CID value */
+			memcpy(tlv.u.org.data, cid, strlen(cid)); /* NDM Subtype Device CID value */
 			TLV_ADD(p, tlv, tlv_len);
 		}
 
@@ -449,7 +449,7 @@ int main(int argc, char *argv[])
 	ipv4_address = NDM_IP_SOCKADDR_ANY;
 
 	for (;;) {
-		c = getopt(argc, argv, "u:S:m:M:I:p:x:n:D:A:P:bwV:d");
+		c = getopt(argc, argv, "u:S:m:M:I:p:x:n:D:A:P:bwV:dc:");
 
 		if (c < 0)
 			break;

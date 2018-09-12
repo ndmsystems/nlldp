@@ -313,10 +313,12 @@ static void nlldo_handle_packet()
 							if (datalen < sizeof(p_fw)) {
 								memcpy(p_fw, tlv->u.org.data, datalen);
 							}
+							break;
 						case 4: /* CID */
 							if (datalen < sizeof(p_cid)) {
 								memcpy(p_cid, tlv->u.org.data, datalen);
 							}
+							break;
 						default:
 							break;
 					};
