@@ -212,12 +212,14 @@ static void nlldo_handle_packet()
 	uint16_t p_port = 0;
 	uint8_t p_fw[128];
 	uint8_t p_cid[128];
+	uint8_t p_contoller_cid[128];
 
 	ndm_mac_addr_init(&p_mac);
 	memset(p_description, 0, sizeof(p_description));
 	memset(p_mode, 0, sizeof(p_mode));
 	memset(p_fw, 0, sizeof(p_fw));
 	memset(p_cid, 0, sizeof(p_cid));
+	memset(p_contoller_cid, 0, sizeof(p_contoller_cid));
 
 	if (!nlldo_nonblock_read(fd_recv, packet, sizeof(packet), &bytes_read, &sa) ||
 		bytes_read == 0) {
@@ -319,6 +321,12 @@ static void nlldo_handle_packet()
 								memcpy(p_cid, tlv->u.org.data, datalen);
 							}
 							break;
+						case 5: /* Controller CID */
+							if (datalen < sizeof(p_contoller_cid)) {
+								memcpy(p_contoller_cid,
+									tlv->u.org.data, datalen);
+							}
+							break;
 						default:
 							break;
 					};
@@ -352,6 +360,7 @@ static void nlldo_handle_packet()
 				"%s=%u" NESEP_
 				"%s=%d" NESEP_
 				"%s=%s" NESEP_
+				"%s=%s" NESEP_
 				"%s=%s",
 				"mac", ndm_mac_addr_as_string(&p_mac),
 				"ip", p_management_ip,
@@ -360,7 +369,8 @@ static void nlldo_handle_packet()
 				"http_port", p_port,
 				"interface_idx", sa.sll_ifindex,
 				"fw_version", p_fw,
-				"cid", p_cid) && debug ) {
+				"cid", p_cid,
+				"controller_cid", p_contoller_cid) && debug ) {
 			const int err = errno;
 
 			NDM_LOG_ERROR(

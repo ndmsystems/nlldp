@@ -103,6 +103,7 @@ static bool is_bridge = false;
 static bool is_wlan_ap = false;
 static const char *version = "";
 static const char *cid = "";
+static const char *controller_cid = "";
 
 /* internal state */
 static int fd_send = -1;
@@ -359,6 +360,17 @@ static void nllda_loop()
 			TLV_ADD(p, tlv, tlv_len);
 		}
 
+		if (strcmp(seclvl, "private") == 0 && strlen(controller_cid) > 1) {
+			/* NDM Specific Contoller CID */
+			tlv_len = 4 + strlen(controller_cid);
+			memset(&tlv, 0, sizeof(tlv));
+			tlv.hdr = TLV_HDR(127, tlv_len); /* NDM Specific Contoller CID */
+			memcpy(tlv.u.org.org, org_uniq_code, sizeof(org_uniq_code));
+			tlv.u.org.subtype = 5; /* NDM Subtype Device CID */
+			memcpy(tlv.u.org.data, controller_cid, strlen(controller_cid)); /* NDM Subtype Controller CID value */
+			TLV_ADD(p, tlv, tlv_len);
+		}
+
 		/* End of LLDPDU */
 		memset(&tlv, 0, sizeof(tlv));
 		memcpy(p, &tlv, 2);
@@ -449,7 +461,7 @@ int main(int argc, char *argv[])
 	ipv4_address = NDM_IP_SOCKADDR_ANY;
 
 	for (;;) {
-		c = getopt(argc, argv, "u:S:m:M:I:p:x:n:D:A:P:bwV:dc:");
+		c = getopt(argc, argv, "u:S:m:M:I:p:x:n:D:A:P:bwV:dc:C:");
 
 		if (c < 0)
 			break;
@@ -534,6 +546,10 @@ int main(int argc, char *argv[])
 
 		case 'c':
 			cid = optarg;
+			break;
+
+		case 'C':
+			controller_cid = optarg;
 			break;
 
 		default:
