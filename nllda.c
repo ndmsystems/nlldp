@@ -104,6 +104,7 @@ static bool is_wlan_ap = false;
 static const char *version = "";
 static const char *cid = "";
 static const char *controller_cid = "";
+static const char *ta_domain = "";
 
 /* internal state */
 static int fd_send = -1;
@@ -218,7 +219,7 @@ static bool nllda_nonblock_write(
 static void nllda_loop()
 {
 	while (!ndm_sys_is_interrupted()) {
-		uint8_t packet[1024];
+		uint8_t packet[1200];
 		uint8_t *p = packet;
 		const uint8_t *dst_mac;
 		uint16_t *proto;
@@ -371,6 +372,17 @@ static void nllda_loop()
 			TLV_ADD(p, tlv, tlv_len);
 		}
 
+		if (strcmp(seclvl, "private") == 0 && strlen(ta_domain) > 1) {
+			/* NDM Specific TA Domain */
+			tlv_len = 4 + strlen(ta_domain);
+			memset(&tlv, 0, sizeof(tlv));
+			tlv.hdr = TLV_HDR(127, tlv_len); /* NDM Specific TA domain */
+			memcpy(tlv.u.org.org, org_uniq_code, sizeof(org_uniq_code));
+			tlv.u.org.subtype = 6; /* NDM Subtype TA domain */
+			memcpy(tlv.u.org.data, ta_domain, strlen(ta_domain)); /* NDM Subtype TA Domain value */
+			TLV_ADD(p, tlv, tlv_len);
+		}
+
 		/* End of LLDPDU */
 		memset(&tlv, 0, sizeof(tlv));
 		memcpy(p, &tlv, 2);
@@ -461,7 +473,7 @@ int main(int argc, char *argv[])
 	ipv4_address = NDM_IP_SOCKADDR_ANY;
 
 	for (;;) {
-		c = getopt(argc, argv, "u:S:m:M:I:p:x:n:D:A:P:bwV:dc:C:");
+		c = getopt(argc, argv, "u:S:m:M:I:p:x:n:D:A:P:bwV:dc:C:T:");
 
 		if (c < 0)
 			break;
@@ -550,6 +562,10 @@ int main(int argc, char *argv[])
 
 		case 'C':
 			controller_cid = optarg;
+			break;
+
+		case 'T':
+			ta_domain = optarg;
 			break;
 
 		default:
