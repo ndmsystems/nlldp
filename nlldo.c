@@ -183,7 +183,7 @@ static bool nlldo_nonblock_read(
 
 			return false;
 		}
-	} else if (len != sizeof(*sa) - 2) {
+	} else if (len < sizeof(*sa) - 2) {
 		if (debug) {
 			NDM_LOG_ERROR("invalid address size");
 		}
