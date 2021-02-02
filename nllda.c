@@ -47,6 +47,7 @@ THE SOFTWARE.
 #include <ndm/mac_addr.h>
 
 #define SEND_INTERVAL				(60 * 1000) // ms
+#define SEND_INTERVAL_LOOPDETECT		(3 * 1000) // ms
 #define SEND_TTL					120 // sec
 #define READ_RETRY_MS				100 // ms
 #define READ_RETRY_TIMES			5 //
@@ -105,6 +106,7 @@ static const char *version = "";
 static const char *cid = "";
 static const char *controller_cid = "";
 static const char *ta_domain = "";
+static bool loop_detect = false;
 
 /* internal state */
 static int fd_send = -1;
@@ -218,6 +220,10 @@ static bool nllda_nonblock_write(
 
 static void nllda_loop()
 {
+	const bool is_private = (strcmp(seclvl, "private") == 0);
+	const bool is_protected = (strcmp(seclvl, "protected") == 0);
+	const bool is_loop_detect = loop_detect && (is_private || is_protected);
+
 	while (!ndm_sys_is_interrupted()) {
 		uint8_t packet[1200];
 		uint8_t *p = packet;
@@ -227,7 +233,7 @@ static void nllda_loop()
 		size_t tlv_len;
 		struct lldp_tlv tlv;
 
-		if (strcmp(seclvl, "private") == 0)
+		if (is_private || is_loop_detect)
 			dst_mac = dst_broadcast_mac;
 		else
 			dst_mac = dst_multicast_mac;
@@ -287,7 +293,7 @@ static void nllda_loop()
 		TLV_ADD(p, tlv, tlv_len);
 
 		if (!ndm_ip_sockaddr_is_equal(&ipv4_address, &NDM_IP_SOCKADDR_ANY) &&
-			strcmp(seclvl, "private") == 0) {
+			is_private) {
 			/* management access */
 			tlv_len = 12;
 			memset(&tlv, 0, sizeof(tlv));
@@ -328,7 +334,7 @@ static void nllda_loop()
 		memcpy(tlv.u.org.data, mode, strlen(mode)); /* NDM Subtype System Mode value */
 		TLV_ADD(p, tlv, tlv_len);
 
-		if (strcmp(seclvl, "private") == 0 && port != 0) {
+		if (is_private && port != 0) {
 			/* NDM Specific HTTP port */
 			tlv_len = 6;
 			memset(&tlv, 0, sizeof(tlv));
@@ -339,7 +345,7 @@ static void nllda_loop()
 			TLV_ADD(p, tlv, tlv_len);
 		}
 
-		if (strcmp(seclvl, "private") == 0) {
+		if (is_private) {
 			/* NDM Specific Software version */
 			tlv_len = 4 + strlen(version);
 			memset(&tlv, 0, sizeof(tlv));
@@ -350,7 +356,7 @@ static void nllda_loop()
 			TLV_ADD(p, tlv, tlv_len);
 		}
 
-		if (strcmp(seclvl, "private") == 0 && strlen(cid) > 1) {
+		if (is_private && strlen(cid) > 1) {
 			/* NDM Specific Device CID */
 			tlv_len = 4 + strlen(cid);
 			memset(&tlv, 0, sizeof(tlv));
@@ -361,7 +367,7 @@ static void nllda_loop()
 			TLV_ADD(p, tlv, tlv_len);
 		}
 
-		if (strcmp(seclvl, "private") == 0 && strlen(controller_cid) > 1) {
+		if (is_private && strlen(controller_cid) > 1) {
 			/* NDM Specific Contoller CID */
 			tlv_len = 4 + strlen(controller_cid);
 			memset(&tlv, 0, sizeof(tlv));
@@ -372,7 +378,7 @@ static void nllda_loop()
 			TLV_ADD(p, tlv, tlv_len);
 		}
 
-		if (strcmp(seclvl, "private") == 0 && strlen(ta_domain) > 1) {
+		if (is_private && strlen(ta_domain) > 1) {
 			/* NDM Specific TA Domain */
 			tlv_len = 4 + strlen(ta_domain);
 			memset(&tlv, 0, sizeof(tlv));
@@ -407,7 +413,10 @@ static void nllda_loop()
 			}
 		}
 
-		ndm_sys_sleep_msec(SEND_INTERVAL);
+		ndm_sys_sleep_msec(
+			is_loop_detect ?
+				SEND_INTERVAL_LOOPDETECT :
+				SEND_INTERVAL);
 	}
 }
 
@@ -473,7 +482,7 @@ int main(int argc, char *argv[])
 	ipv4_address = NDM_IP_SOCKADDR_ANY;
 
 	for (;;) {
-		c = getopt(argc, argv, "u:S:m:M:I:p:x:n:D:A:P:bwV:dc:C:T:");
+		c = getopt(argc, argv, "u:S:m:M:I:p:x:n:D:A:P:bwV:dc:C:T:l");
 
 		if (c < 0)
 			break;
@@ -542,6 +551,10 @@ int main(int argc, char *argv[])
 							  optarg);
 				return ret_code;
 			}
+			break;
+
+		case 'l':
+			loop_detect = true;
 			break;
 
 		case 'b':
